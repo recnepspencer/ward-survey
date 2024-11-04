@@ -1,0 +1,138 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id             String        @id @default(uuid())
+  email          String        @unique
+  passwordHash   String
+  name           String?
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organizationId String?
+  organization   Organization? @relation("UserOrganization", fields: [organizationId], references: [id])
+  roles          UserRole[]
+  surveys        Survey[]      @relation("SurveyCreator")
+  auditLogs      AuditLog[]
+}
+
+model Organization {
+  id          String            @id @default(uuid())
+  name        String
+  type        OrganizationType
+  parentId    String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  parent      Organization?     @relation("OrganizationHierarchy", fields: [parentId], references: [id])
+  children    Organization[]    @relation("OrganizationHierarchy")
+  surveys     Survey[]
+  userRoles   UserRole[]
+  invitations AdminInvitation[]
+  users       User[]            @relation("UserOrganization") // Added field
+}
+
+model Role {
+  id          String            @id @default(uuid())
+  name        String            @unique
+  description String?
+  userRoles   UserRole[]
+  invitations AdminInvitation[]
+}
+
+model UserRole {
+  id             String   @id @default(uuid())
+  userId         String
+  roleId         String
+  organizationId String
+  assignedAt     DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id])
+  role         Role         @relation(fields: [roleId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([userId, roleId, organizationId])
+}
+
+model Survey {
+  id             String       @id @default(uuid())
+  organizationId String
+  title          String
+  description    String?
+  createdBy      String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  creator        User         @relation("SurveyCreator", fields: [createdBy], references: [id])
+  questions      Question[]
+  responses      Response[]
+}
+
+model Question {
+  id        String       @id @default(uuid())
+  surveyId  String
+  text      String
+  type      QuestionType
+  options   Json?
+  order     Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  survey    Survey     @relation(fields: [surveyId], references: [id])
+  responses Response[]
+}
+
+model Response {
+  id                String   @id @default(uuid())
+  surveyId          String
+  questionId        String
+  responseText      String?
+  responseOptionIds Json?
+  submittedAt       DateTime @default(now())
+  survey            Survey   @relation(fields: [surveyId], references: [id])
+  question          Question @relation(fields: [questionId], references: [id])
+}
+
+model AdminInvitation {
+  id             String   @id @default(uuid())
+  email          String
+  organizationId String
+  roleId         String
+  token          String   @unique
+  expiresAt      DateTime
+  accepted       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  role         Role         @relation(fields: [roleId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String?
+  entityId  String?
+  timestamp DateTime @default(now())
+  details   Json?
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+enum OrganizationType {
+  area
+  stake
+  ward
+}
+
+enum QuestionType {
+  text
+  single_select
+  multi_select
+  likert
+}
